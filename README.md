@@ -3,6 +3,24 @@
 ASP.NET Core (.NET 10) RESTful API that returns the details of the best `n` stories from the
 [Hacker News API](https://github.com/HackerNews/API), ordered by score (descending).
 
+## At a glance
+
+```bash
+docker build -t hackernews-beststories . && docker run --rm -p 8080:8080 hackernews-beststories
+curl "http://localhost:8080/api/stories/best?count=10"
+```
+
+- **Endpoint**: `GET /api/stories/best?count={n}` returns the best `n` stories ordered by score
+  ([usage](#usage)).
+- **Hacker News is protected**: requests are served from a cache refreshed in the background, so
+  Hacker News receives at most 1 + 200 calls per minute whatever the incoming load
+  ([design](#design)).
+- **Measured**: 1000 req/s sustained with p95 < 50 ms, validated by a k6 load test
+  ([SLO](#service-level-objectives-slo)).
+- **Quality**: 120 unit and component tests (≥ 80% line coverage enforced), analyzers with warnings
+  as errors, CodeQL, dependency and image scanning, all enforced in CI ([quality gates](#quality-gates)).
+- Assumptions and enhancements given more time are listed at the [end](#assumptions).
+
 ## Requirements
 
 - [.NET SDK 10.0](https://dotnet.microsoft.com/download/dotnet/10.0) (see `global.json`)
@@ -148,6 +166,10 @@ through extension methods, and technical folders inside a single web project.
   `PackageReference` never has a `Version`. Restores are locked, so updated `packages.lock.json`
   files are committed.
 - `main` is protected: every change goes through a pull request (see [Quality gates](#quality-gates)).
+- The service was built with an AI coding assistant (Claude Code) as a pair programmer, one pull
+  request per step of the [implementation plan](docs/implementation-plan.md), which records the
+  design decisions. [`CLAUDE.md`](CLAUDE.md) holds the rules the assistant follows in this
+  repository.
 
 ## Design
 
