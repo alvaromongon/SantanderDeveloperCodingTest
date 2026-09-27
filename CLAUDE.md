@@ -38,6 +38,8 @@ tests/
 
 - Test folders and namespaces **mirror the source**: `src/.../Services/Foo.cs` →
   `tests/...UnitTests/Services/FooTests.cs`, namespace `HackerNews.BestStories.Api.UnitTests.Services`.
+- Shared hand-written fakes/stubs (e.g. `StubHttpMessageHandler`) live in `TestDoubles/` at the root
+  of each test project; it is the only test folder that does not mirror the source.
 - No test may call the real Hacker News API.
 - `build/coverage.sh` – merges coverage and enforces the threshold (80% lines).
 - `.githooks/pre-push` – local gate (format, build, tests, coverage); enabled by the first build.

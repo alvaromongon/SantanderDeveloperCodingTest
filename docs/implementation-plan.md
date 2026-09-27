@@ -84,6 +84,12 @@ Follow the folder conventions and rules in [`CLAUDE.md`](../CLAUDE.md).
 `HackerNews__BaseAddress` and `HackerNews__RefreshInterval` are already used by the load test
 `compose.yaml`; keep those names.
 
+Validation rules (the app fails to start otherwise): `BaseAddress` absolute, both intervals between
+1 s and 1 day, `CacheExpiration` > `RefreshInterval`, `MaxConcurrentRequests` between 1 and 64.
+
+The client throws `HttpRequestException` on error status codes (after the standard resilience
+retries) and `JsonException` on malformed payloads; callers (step 3) decide how to degrade.
+
 ## Steps
 
 ### 1. Models and mapping
@@ -104,6 +110,18 @@ Follow the folder conventions and rules in [`CLAUDE.md`](../CLAUDE.md).
 - Stable sort by score descending, `Take(n)`.
 - Tests: ordering and ties, `n` bigger than available, cache hits avoid client calls, stampede
   protection (many concurrent calls → one rebuild), partial item failures.
+- **Discuss with the owner before implementing** (open points from step 2):
+  - *Service lifetime*: the typed `IHackerNewsClient` is transient so `IHttpClientFactory` can rotate
+    pooled handlers (DNS changes); a singleton capturing it would pin one handler forever.
+    Proposal: `BestStoriesService` **transient** (lightweight and stateless, construction cost is
+    negligible; scoped is equivalent since it is resolved once per request). Alternatives: scoped,
+    or singleton with `IHttpClientFactory` / `PooledConnectionLifetime`.
+  - *Consequence for step 4*: the singleton refresher cannot inject the service directly (captive
+    dependency / scope validation); it creates a scope per refresh with `IServiceScopeFactory`.
+  - *Where the concurrency bound lives*: it must be shared (singleton), not per service instance,
+    otherwise e.g. a cold-start rebuild overlapping a refresh doubles the limit. Options: a
+    singleton limiter (e.g. `SemaphoreSlim`) or the concurrency limiter of the
+    `AddStandardResilienceHandler()` pipeline configured with `MaxConcurrentRequests` and a queue.
 
 ### 4. Background refresher
 - `BackgroundServices/BestStoriesCacheRefresher`.
@@ -115,6 +133,10 @@ Follow the folder conventions and rules in [`CLAUDE.md`](../CLAUDE.md).
 - Component tests (`WebApplicationFactory` + WireMock.Net): happy path and JSON contract, ordering,
   `count` validation (400), `count > 200`, Hacker News down with cold cache (503) and warm cache
   (stale data served), upstream calls bounded under concurrent requests.
+- Resilience of the Hacker News client (deferred from step 2, where it is not unit tested because
+  the retries use real backoff): transient upstream failures (e.g. `500` then `200`) are retried by
+  `AddStandardResilienceHandler()` and the request succeeds. Shorten the retry delay in the test
+  host configuration to keep the test fast.
 
 ### 6. Cross-cutting
 - Health checks: `/health/live` and `/health/ready` (ready when the ranked cache is warm).
