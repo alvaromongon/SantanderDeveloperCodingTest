@@ -66,4 +66,5 @@ The SLO is defined in `README.md` and enforced by the thresholds in
   never put `Version` on a `PackageReference`. Commit updated `packages.lock.json` files.
 - Test names: `Method_Scenario_ExpectedResult`.
 - Commits are authored by the repository owner: no `Co-Authored-By` trailers.
-- **Never `git push`** – the owner pushes manually. `main` is protected: changes go through pull requests.
+- **Only `git push` after an explicit confirmation from the owner** for that push; approval does not carry
+  over to later pushes. `main` is protected: changes go through pull requests.
