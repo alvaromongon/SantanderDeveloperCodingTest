@@ -52,7 +52,18 @@ Returns the best `count` stories ordered by score descending:
 |---|---|
 | `200 OK` | Stories returned. There is no upper limit: a `count` above the best stories provided by Hacker News (currently at most 200) returns all of them |
 | `400 Bad Request` | Validation `ProblemDetails` with the error in `errors.count`: *"The count query parameter is required."* when it is missing or empty, *"count must be an integer greater than or equal to 1."* otherwise |
+| `429 Too Many Requests` | The global limit of concurrent requests (`RequestConcurrency:PermitLimit`, default 1000) is exceeded (`ProblemDetails`) |
 | `503 Service Unavailable` | Hacker News is unavailable and there is no cached data yet (`ProblemDetails`) |
+
+### Health checks
+
+| Endpoint | Healthy (`200`) when |
+|---|---|
+| `/health/live` | The process responds (no dependency is checked) |
+| `/health/ready` | The best stories ranking is cached, so requests are served without calling Hacker News |
+
+Unhealthy checks return `503`. Both endpoints only read local state (never Hacker News) and are
+excluded from the concurrency limiter, so they keep answering under load.
 
 ## How to test
 
@@ -74,9 +85,11 @@ src/HackerNews.BestStories.Api/
 ├── Apis/                    Minimal API endpoint groups
 ├── BackgroundServices/      Hosted services (periodic cache refresh)
 ├── Extensions/              Service registration and pipeline extension methods
+├── HealthChecks/            Health checks (readiness: ranking cached)
 ├── Infrastructure/
 │   └── HackerNews/          Typed HttpClient, upstream DTOs and options
 ├── Models/                  Public API contracts
+├── RateLimiting/            Options of the global incoming concurrency limiter
 ├── Services/                Application logic
 └── Program.cs
 tests/
@@ -98,6 +111,9 @@ _TBD_ – summary of the approach:
   stampede protection.
 - **Resilience** on the outgoing `HttpClient` (retries, circuit breaker, timeouts) and bounded
   concurrency towards Hacker News.
+- **Inbound protection**: a global concurrency limiter answers `429` when too many requests are in
+  flight; `/health/ready` reports ready only once the ranking is cached, so a load balancer does
+  not route traffic to an instance that would still have to call Hacker News.
 
 ## Service Level Objectives (SLO)
 

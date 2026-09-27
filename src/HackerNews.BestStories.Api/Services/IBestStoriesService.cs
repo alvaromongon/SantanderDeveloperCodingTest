@@ -23,4 +23,10 @@ internal interface IBestStoriesService
     /// </summary>
     /// <exception cref="HackerNewsUnavailableException">Hacker News failed; the last ranking is kept.</exception>
     Task RefreshAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Whether the ranking is cached, so requests are served without calling Hacker News.
+    /// Only reads the cache: it neither calls Hacker News nor populates the cache.
+    /// </summary>
+    Task<bool> IsRankingCachedAsync(CancellationToken cancellationToken);
 }
