@@ -126,8 +126,10 @@ public sealed class BestStoriesApiTests : IAsyncDisposable
             ("?count=-1", invalid),
         ];
 
+        string[] environments = ["Development", "Production"];
+
         var data = new TheoryData<string, string, string>();
-        foreach (var environment in (string[])["Development", "Production"])
+        foreach (var environment in environments)
         {
             foreach (var (query, error) in cases)
             {
