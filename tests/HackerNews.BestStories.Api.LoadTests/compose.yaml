@@ -34,7 +34,7 @@ services:
     environment:
       BASE_URL: http://api:8080
       STUB_ADMIN_URL: http://hackernews-stub:8080/__admin
-      RATE: ${RATE:-500}
+      RATE: ${RATE:-1000}
       DURATION: ${DURATION:-3m}
       REFRESH_INTERVAL_SECONDS: ${REFRESH_INTERVAL_SECONDS:-60}
       ENDPOINT: ${ENDPOINT:-/api/stories/best}

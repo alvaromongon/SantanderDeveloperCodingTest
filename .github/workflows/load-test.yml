@@ -8,7 +8,7 @@ on:
     inputs:
       rate:
         description: Requests per second (SLO load)
-        default: "500"
+        default: "1000"
         required: true
       duration:
         description: Test duration (e.g. 90s, 3m)
@@ -24,7 +24,7 @@ concurrency:
 
 env:
   COMPOSE_FILE: tests/HackerNews.BestStories.Api.LoadTests/compose.yaml
-  RATE: ${{ inputs.rate || '500' }}
+  RATE: ${{ inputs.rate || '1000' }}
   DURATION: ${{ inputs.duration || '3m' }}
 
 jobs:
