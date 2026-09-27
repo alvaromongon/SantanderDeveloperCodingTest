@@ -84,6 +84,12 @@ Follow the folder conventions and rules in [`CLAUDE.md`](../CLAUDE.md).
 `HackerNews__BaseAddress` and `HackerNews__RefreshInterval` are already used by the load test
 `compose.yaml`; keep those names.
 
+Validation rules (the app fails to start otherwise): `BaseAddress` absolute, both intervals between
+1 s and 1 day, `CacheExpiration` > `RefreshInterval`, `MaxConcurrentRequests` between 1 and 64.
+
+The client throws `HttpRequestException` on error status codes (after the standard resilience
+retries) and `JsonException` on malformed payloads; callers (step 3) decide how to degrade.
+
 ## Steps
 
 ### 1. Models and mapping
