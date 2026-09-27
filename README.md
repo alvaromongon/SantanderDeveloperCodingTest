@@ -16,12 +16,16 @@ ASP.NET Core (.NET 10) RESTful API that returns the details of the best `n` stor
 dotnet run --project src/HackerNews.BestStories.Api
 ```
 
+The API listens on `http://localhost:5253` (see `Properties/launchSettings.json`).
+
 ### With Docker
 
 ```bash
 docker build -t hackernews-beststories .
 docker run --rm -p 8080:8080 hackernews-beststories
 ```
+
+The API listens on `http://localhost:8080`.
 
 The OpenAPI document is available at `/openapi/v1.json`.
 
@@ -42,7 +46,7 @@ Settings live in `appsettings.json` and can be overridden with environment varia
 ### Usage
 
 ```bash
-curl "http://localhost:8080/api/stories/best?count=3"
+curl "http://localhost:8080/api/stories/best?count=3"   # Docker; use port 5253 with dotnet run
 ```
 
 Returns the best `count` stories ordered by score descending:
@@ -265,25 +269,40 @@ written to `tests/HackerNews.BestStories.Api.LoadTests/results/`.
   stories may be returned even when `n` ≤ 200.
 - `time` is returned in UTC (`+00:00`).
 - Stories with the same score keep the Hacker News `beststories` order.
-- Each instance keeps its own in-memory cache: with `k` instances Hacker News receives `k` refreshes
-  per interval, which is acceptable for a small number of instances.
+- The API is **stateless** for its clients (no sessions or per-client state; the in-memory cache
+  only holds data derived from Hacker News), so several instances can run behind a load balancer
+  without session affinity. Each instance keeps its own cache and limits, though: with `k`
+  instances Hacker News receives `k` refreshes per interval, instances may briefly serve different
+  rankings, and the concurrency limits apply per instance. This is acceptable for a small number of
+  instances (see the distributed cache enhancement).
+- The API is deployed **behind a reverse proxy, ingress or API gateway** that terminates TLS and
+  forwards plain HTTP to the container (port 8080). The application therefore does not configure
+  HTTPS redirection, HSTS or certificates.
 - The API is public and read-only: no authentication is required.
 
 ## Enhancements given more time
 
-- **Distributed L2 cache** (e.g. Redis through `HybridCache`) and a single refresher (leader
-  election or a separate worker), so that scaling out does not multiply the Hacker News load.
+- **Horizontal scaling with a distributed L2 cache** (e.g. Redis through `HybridCache`): instances
+  behind a load balancer would share the same ranking (consistent answers, new instances start
+  warm), so the service could scale out with the load. On its own the L2 cache does not stop each
+  instance from running its own periodic refresh, and `HybridCache` stampede protection is per
+  process, so a **single refresher** (leader election, a distributed lock or a separate worker) is
+  also needed to keep the Hacker News load independent of the number of instances.
+- **Proxy integration**: `UseForwardedHeaders()` configured for the known proxies, so the original
+  client IP and scheme reach the application (needed for per-client rate limiting and logs).
 - **Incremental refresh** with `/v0/updates.json`, fetching only the items that changed instead of
   all 200 every interval.
 - **HTTP caching**: `Cache-Control`/`ETag` headers or ASP.NET Core output caching, so clients and
   CDNs can serve repeated requests; precomputing the serialized ranking would also cut the per-request
-  CPU cost, which is the throughput bottleneck.
+  CPU cost, most likely the throughput bottleneck.
 - **Per-client rate limiting** (partitioned by API key or IP) on top of the global concurrency limit.
 - **Observability**: OpenTelemetry traces and metrics (cache hit ratio, refresh duration and
   failures, Hacker News calls), exported to a monitoring backend with alerts on the SLO.
 - **Configurable readiness grace**: stay ready for a while after the ranking expires if Hacker News
   is down, serving stale data for longer (`stale-while-revalidate`-style).
 - **API versioning** and a `Retry-After` header on `429`/`503`.
+- **Interactive API reference** (e.g. Scalar with `MapScalarApiReference()`, in Development) on top
+  of the OpenAPI document, to explore and try the endpoint from the browser.
 - **Load test** on dedicated infrastructure (separate load generator) and longer soak tests.
 
 ## Quality gates
