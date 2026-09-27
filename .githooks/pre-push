@@ -12,9 +12,9 @@ echo "pre-push: building (warnings as errors)..."
 dotnet build --configuration Release
 
 echo "pre-push: running tests with coverage..."
-find tests -type d -name TestResults -prune -exec rm -rf {} +
+rm -rf artifacts/TestResults
 dotnet test --configuration Release --no-build \
-  --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
+  --coverage --coverage-output-format cobertura --results-directory artifacts/TestResults
 
 echo "pre-push: checking coverage..."
 ./build/coverage.sh

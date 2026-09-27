@@ -9,7 +9,7 @@ output="$root/artifacts/coverage"
 
 dotnet tool restore > /dev/null
 dotnet reportgenerator \
-  -reports:"$root/tests/**/TestResults/coverage.cobertura.xml" \
+  -reports:"$root/artifacts/TestResults/*.cobertura.xml" \
   -targetdir:"$output" \
   -reporttypes:"Cobertura;TextSummary;MarkdownSummaryGithub;Html" \
   -filefilters:"-*.g.cs;-*/obj/*" \

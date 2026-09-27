@@ -33,6 +33,8 @@
     <OutputType>Exe</OutputType>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);IDE0005</NoWarn>
+    <!-- Unique coverage file per test project, so all can share one results directory. -->
+    <TestingPlatformCommandLineArguments>$(TestingPlatformCommandLineArguments) --coverage-output $(MSBuildProjectName).cobertura.xml</TestingPlatformCommandLineArguments>
   </PropertyGroup>
 
   <!-- Point git to the versioned hooks (.githooks) so the pre-push gate is active after the first build. -->
