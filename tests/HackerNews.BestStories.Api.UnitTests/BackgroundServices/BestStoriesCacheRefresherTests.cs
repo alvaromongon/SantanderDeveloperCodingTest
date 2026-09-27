@@ -187,7 +187,7 @@ public sealed class BestStoriesCacheRefresherTests : IAsyncDisposable
         _service.GetBestStoriesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(async call =>
         {
             await Task.Delay(Timeout.Infinite, call.Arg<CancellationToken>());
-            return (IReadOnlyList<StoryResponse>)[];
+            return [];
         });
         await StartAsync();
 
