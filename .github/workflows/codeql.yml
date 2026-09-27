@@ -7,6 +7,7 @@ on:
     branches: [main]
   schedule:
     - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -23,7 +24,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      csharp: ${{ github.event_name == 'schedule' || steps.filter.outputs.codeql == 'true' }}
+      csharp: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.filter.outputs.codeql == 'true' }}
     steps:
       - uses: actions/checkout@v7
 
