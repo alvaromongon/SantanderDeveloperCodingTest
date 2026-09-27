@@ -3,8 +3,6 @@
 ASP.NET Core (.NET 10) RESTful API that returns the details of the best `n` stories from the
 [Hacker News API](https://github.com/HackerNews/API), ordered by score (descending).
 
-> **Status:** work in progress. Sections marked _TBD_ will be completed as the implementation lands.
-
 ## Requirements
 
 - [.NET SDK 10.0](https://dotnet.microsoft.com/download/dotnet/10.0) (see `global.json`)
@@ -26,6 +24,20 @@ docker run --rm -p 8080:8080 hackernews-beststories
 ```
 
 The OpenAPI document is available at `/openapi/v1.json`.
+
+### Configuration
+
+Settings live in `appsettings.json` and can be overridden with environment variables (e.g.
+`HackerNews__RefreshInterval=00:00:30`). Invalid values stop the application on start.
+
+| Setting | Default | Description |
+|---|---|---|
+| `HackerNews:BaseAddress` | `https://hacker-news.firebaseio.com/v0/` | Hacker News API base address (absolute) |
+| `HackerNews:RefreshInterval` | `00:01:00` | How often the cache is refreshed in the background (1 s – 1 day) |
+| `HackerNews:CacheExpiration` | `00:03:00` | Lifetime of the cached entries; must be greater than `RefreshInterval` |
+| `HackerNews:MaxConcurrentRequests` | `8` | Maximum calls in flight to Hacker News (1 – 64), retries included |
+| `RequestConcurrency:PermitLimit` | `1000` | Maximum incoming requests processed at once (1 – 100000) |
+| `RequestConcurrency:QueueLimit` | `0` | Incoming requests queued when the permits are exhausted (0 – 100000) |
 
 ### Usage
 
@@ -103,35 +115,84 @@ route-group extension methods and dependency injection wired through extension m
 
 ## Design
 
-_TBD_ – summary of the approach:
+```mermaid
+flowchart LR
+    client([Client]) -->|GET /api/stories/best?count=n| limiter[Concurrency limiter<br/>429 when exceeded]
+    limiter --> api[BestStoriesApi<br/>validates count]
+    api --> service[BestStoriesService<br/>ranking.Take n]
+    service -->|read ranking| cache[(HybridCache<br/>in-memory)]
+    refresher[BestStoriesCacheRefresher<br/>every RefreshInterval] -->|RefreshAsync| service
+    service -->|warm-up, refresh or<br/>cold-cache rebuild| hn[HackerNewsClient<br/>resilience + max 8 in flight]
+    hn --> upstream([Hacker News API])
+```
 
-- **Hybrid caching** with `HybridCache`: the list of best story IDs, each story, and the ranked
-  result are cached; a background service refreshes them periodically so Hacker News load is
-  bounded and independent of incoming traffic. Cache misses (cold start) are rebuilt once thanks to
-  stampede protection.
-- **Resilience** on the outgoing `HttpClient` (retries, circuit breaker, timeouts) and bounded
-  concurrency towards Hacker News.
-- **Inbound protection**: a global concurrency limiter answers `429` when too many requests are in
-  flight; `/health/ready` reports ready only once the ranking is cached, so a load balancer does
-  not route traffic to an instance that would still have to call Hacker News.
+- **Requests never call Hacker News in steady state.** Each request reads a single cache entry, the
+  ranking of all best stories sorted by score, and returns its first `n` items. The cost of a
+  request is independent of the Hacker News latency and the served load does not reach Hacker News.
+- **Hybrid caching with `HybridCache`** (in-memory). Three kinds of entries: the best story IDs
+  (`hackernews:beststories`), each mapped story (`hackernews:item:{id}`) and the ranking
+  (`beststories:ranked`). The cached types are immutable, so `HybridCache` hands out the cached
+  instance instead of a copy per request.
+- **Background refresh.** `BestStoriesCacheRefresher` warms up the ranking on start and then, every
+  `RefreshInterval` (60 s), re-fetches the IDs and the items and overwrites the entries. Hacker News
+  receives at most 1 + 200 calls per interval, whatever the incoming load.
+- **Graceful degradation.** Entries live for `CacheExpiration` (3 min), longer than the refresh
+  interval, and a refresh only overwrites them on success: while Hacker News is down the last good
+  ranking keeps being served. An item that fails during a refresh keeps its cached copy; one that
+  fails during a rebuild is skipped. Only when there is no cached ranking and Hacker News is down
+  does the API answer `503`.
+- **Cold cache.** Requests that find no ranking rebuild it with `GetOrCreateAsync`; its stampede
+  protection runs a single rebuild for all concurrent requests, fetching only the items that are not
+  cached yet.
+- **Ranking.** All the best stories (up to 200) are ranked by `score`, because Hacker News does not
+  guarantee the `beststories` order is by score. The sort is stable, so ties keep the Hacker News
+  order. `null`, deleted, dead and non-story items are excluded.
+- **Resilient, bounded outgoing calls.** The typed `HttpClient` uses `AddStandardResilienceHandler()`
+  (retries with backoff, circuit breaker, attempt and total timeouts). Its concurrency limiter, the
+  outermost strategy, is shared by every client instance and bounds the calls in flight to
+  `MaxConcurrentRequests` (8), retries included, which also avoids the TLS errors observed with
+  many parallel connections.
+- **Inbound protection.** A global concurrency limiter rejects requests beyond
+  `RequestConcurrency:PermitLimit` with `429`, so an overload degrades into fast rejections instead
+  of unbounded latency. Health endpoints are excluded.
+- **Operability.** `/health/ready` only reports ready once the ranking is cached, so a load balancer
+  does not route traffic to an instance that would still have to call Hacker News. Every error is
+  an RFC 9457 `ProblemDetails`.
 
 ## Service Level Objectives (SLO)
 
 Measured for `GET /api/stories/best?count={n}` with a mix of `n` (30% of requests with `n = 200`,
-the worst case) on the reference environment: a GitHub-hosted `ubuntu-latest` runner with the API
-running in its Docker image and Hacker News replaced by a stub that adds 100 ms latency per call.
+the worst case) on the reference environment: a GitHub-hosted `ubuntu-latest` runner (4 vCPU shared
+by the API, the stub and k6) with the API running in its Docker image and Hacker News replaced by a
+stub that adds 100 ms latency per call.
 
 | Objective | Target |
 |---|---|
-| Sustained load | **500 requests/second** |
-| Latency at that load | **p95 < 100 ms**, **p99 < 250 ms** |
+| Sustained load | **1000 requests/second** |
+| Latency at that load | **p95 < 50 ms**, **p99 < 100 ms** |
 | Error rate at that load | **< 0.1%** |
 | Hacker News protection | At most one full refresh (1 + 200 requests) per refresh interval, **independent of the incoming load** |
 | Data freshness | Stories are at most one refresh interval old (default 60 s) while Hacker News is available |
 
-These targets are an initial proposal and will be calibrated with the first load test results.
 They are enforced as k6 thresholds in
 [`best-stories.js`](tests/HackerNews.BestStories.Api.LoadTests/scripts/best-stories.js).
+
+#### Calibration
+
+The targets were calibrated with 3-minute runs of the `Load test` workflow on the reference
+environment:
+
+| Rate | p95 | p99 | Errors | Dropped iterations | Hacker News calls |
+|---|---|---|---|---|---|
+| 500 req/s | 0.3 ms | 0.6 ms | 0% | 0 | 603 |
+| 1000 req/s | 0.7 ms | 2.2 ms | 0% | 0 | 603 |
+| 2000 req/s | 10.2 ms | 30.6 ms | 0% | 344 | 603 |
+| 4000 req/s | 339 ms | 485 ms | 0% | 235 372 (peak ~2700 req/s) | 603 |
+
+The runner saturates at about 2000–2700 req/s (CPU shared with the load generator; the per-request cost is most
+likely serializing up to 200 stories per response). The sustained load objective is set at half of
+that, and the latency targets leave room for the variance of shared runners. Hacker News
+received exactly one full refresh (201 calls) per minute in every run, independently of the load.
 
 ### Load test
 
@@ -159,12 +220,34 @@ written to `tests/HackerNews.BestStories.Api.LoadTests/results/`.
   result-size parameters); `n` lower than 1 is rejected with `400 Bad Request`.
 - The best stories are ranked by `score` across the whole `beststories` list, not only the first
   `n` IDs, because Hacker News does not guarantee that list is ordered by score.
-- Data may be slightly stale (up to the configured refresh interval).
-- _TBD_
+- Data may be slightly stale (up to the configured refresh interval); this is the trade-off that
+  keeps the Hacker News load independent of the incoming traffic.
+- A story without `url` (e.g. *Ask HN*) uses its Hacker News page as `uri`
+  (`https://news.ycombinator.com/item?id={id}`), and a missing `descendants` is `commentCount = 0`.
+- Items that are `null`, deleted, dead or not of type `story` are not returned, so fewer than `n`
+  stories may be returned even when `n` ≤ 200.
+- `time` is returned in UTC (`+00:00`).
+- Stories with the same score keep the Hacker News `beststories` order.
+- Each instance keeps its own in-memory cache: with `k` instances Hacker News receives `k` refreshes
+  per interval, which is acceptable for a small number of instances.
+- The API is public and read-only: no authentication is required.
 
 ## Enhancements given more time
 
-_TBD_
+- **Distributed L2 cache** (e.g. Redis through `HybridCache`) and a single refresher (leader
+  election or a separate worker), so that scaling out does not multiply the Hacker News load.
+- **Incremental refresh** with `/v0/updates.json`, fetching only the items that changed instead of
+  all 200 every interval.
+- **HTTP caching**: `Cache-Control`/`ETag` headers or ASP.NET Core output caching, so clients and
+  CDNs can serve repeated requests; precomputing the serialized ranking would also cut the per-request
+  CPU cost, which is the throughput bottleneck.
+- **Per-client rate limiting** (partitioned by API key or IP) on top of the global concurrency limit.
+- **Observability**: OpenTelemetry traces and metrics (cache hit ratio, refresh duration and
+  failures, Hacker News calls), exported to a monitoring backend with alerts on the SLO.
+- **Configurable readiness grace**: stay ready for a while after the ranking expires if Hacker News
+  is down, serving stale data for longer (`stale-while-revalidate`-style).
+- **API versioning** and a `Retry-After` header on `429`/`503`.
+- **Load test** on dedicated infrastructure (separate load generator) and longer soak tests.
 
 ## Quality gates
 
