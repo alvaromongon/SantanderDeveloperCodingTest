@@ -30,10 +30,10 @@ internal sealed class StubHttpMessageHandler : HttpMessageHandler
         var uri = request.RequestUri!;
         Requests.Add(uri);
 
-        var response = _responses.TryGetValue(uri.AbsolutePath, out var createResponse)
-            ? createResponse()
-            : new HttpResponseMessage(HttpStatusCode.NotFound);
-
-        return Task.FromResult(response);
+        // Ownership of the response passes to the caller (HttpClient), which disposes it.
+        var createResponse = _responses.GetValueOrDefault(uri.AbsolutePath, CreateNotFoundResponse);
+        return Task.FromResult(createResponse());
     }
+
+    private static HttpResponseMessage CreateNotFoundResponse() => new(HttpStatusCode.NotFound);
 }
