@@ -315,4 +315,51 @@ public sealed class BestStoriesServiceTests : IDisposable
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
+
+    [Fact]
+    public async Task IsRankingCachedAsync_ColdCache_ReturnsFalseWithoutCallingClient()
+    {
+        GivenBestStories((1, 10));
+
+        var first = await CreateService().IsRankingCachedAsync(CancellationToken);
+        var second = await CreateService().IsRankingCachedAsync(CancellationToken);
+
+        first.Should().BeFalse();
+        second.Should().BeFalse("checking the cache must not populate it");
+        _client.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task IsRankingCachedAsync_AfterGetBestStories_ReturnsTrue()
+    {
+        GivenBestStories((1, 10));
+        await CreateService().GetBestStoriesAsync(1, CancellationToken);
+
+        var cached = await CreateService().IsRankingCachedAsync(CancellationToken);
+
+        cached.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task IsRankingCachedAsync_AfterRefresh_ReturnsTrue()
+    {
+        GivenBestStories((1, 10));
+        await CreateService().RefreshAsync(CancellationToken);
+
+        var cached = await CreateService().IsRankingCachedAsync(CancellationToken);
+
+        cached.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task IsRankingCachedAsync_RebuildFailed_ReturnsFalse()
+    {
+        _client.GetBestStoryIdsAsync(Arg.Any<CancellationToken>()).ThrowsAsync(new HttpRequestException("Boom"));
+        var act = () => CreateService().GetBestStoriesAsync(1, CancellationToken);
+        await act.Should().ThrowAsync<HackerNewsUnavailableException>();
+
+        var cached = await CreateService().IsRankingCachedAsync(CancellationToken);
+
+        cached.Should().BeFalse();
+    }
 }

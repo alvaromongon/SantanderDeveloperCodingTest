@@ -48,7 +48,8 @@ Follow the folder conventions and rules in [`CLAUDE.md`](../CLAUDE.md).
 | Upstream failure contract | `BestStoriesService` wraps upstream failures (`HttpRequestException`, `JsonException`, Polly `ExecutionRejectedException`) in `HackerNewsUnavailableException` |
 | Service lifetime | `BestStoriesService` is **transient** (the typed Hacker News client is transient so `IHttpClientFactory` can rotate handlers); singletons resolve it from a scope |
 | Outgoing concurrency bound | Concurrency limiter of `AddStandardResilienceHandler()` (outermost strategy, shared by every client instance, retries included): `PermitLimit = MaxConcurrentRequests`, queue of 1000 |
-| Inbound protection | Global concurrency limiter (configurable, generous) returning `429`; per-client rate limiting is a documented future enhancement |
+| Inbound protection | Global concurrency limiter (`RateLimiterOptions.GlobalLimiter`, section `RequestConcurrency`: `PermitLimit` 1000, `QueueLimit` 0) returning `429` as `ProblemDetails`; health endpoints are excluded (`DisableRateLimiting()`); per-client rate limiting is a documented future enhancement |
+| Readiness | `/health/ready` reads the ranking entry with `IBestStoriesService.IsRankingCachedAsync()` (cache-only flags: never calls Hacker News nor populates the cache), so it also turns unready if the ranking expires; `/health/live` runs no check |
 | Defaults | Refresh interval **60 s**, cache TTL **3 min**, max **8** concurrent Hacker News calls |
 | Cache warm-up | On start the refresher warms up the ranking through `GetBestStoriesAsync` (`GetOrCreateAsync`), so it shares the single rebuild with cold-cache requests instead of issuing a second one |
 | Tests | xUnit v3 (MTP), NSubstitute, AwesomeAssertions, WireMock.Net, `FakeTimeProvider`, `FakeLogger`; never call the real Hacker News API |
@@ -86,6 +87,9 @@ Follow the folder conventions and rules in [`CLAUDE.md`](../CLAUDE.md).
 | `RefreshInterval` | `00:01:00` |
 | `CacheExpiration` | `00:03:00` |
 | `MaxConcurrentRequests` | `8` |
+
+Section `RequestConcurrency` (bound to `RequestConcurrencyOptions`, validated on start): `PermitLimit`
+(default `1000`, 1–100000) and `QueueLimit` (default `0`, 0–100000).
 
 `HackerNews__BaseAddress` and `HackerNews__RefreshInterval` are already used by the load test
 `compose.yaml`; keep those names.
@@ -157,9 +161,16 @@ retries) and `JsonException` on malformed payloads; callers (step 3) decide how 
   host configuration to keep the test fast.
 
 ### 6. Cross-cutting
-- Health checks: `/health/live` and `/health/ready` (ready when the ranked cache is warm).
-- Global concurrency limiter (`429` when exceeded).
+- Health checks (`Extensions/HealthCheckExtensions`): `/health/live` and `/health/ready`, ready when
+  the ranked cache is warm (`HealthChecks/BestStoriesReadinessHealthCheck` →
+  `IBestStoriesService.IsRankingCachedAsync()`).
+- Global concurrency limiter (`Extensions/RateLimitingExtensions`, `RateLimiting/RequestConcurrencyOptions`):
+  `429` `ProblemDetails` when exceeded (via `UseStatusCodePages()`); health endpoints excluded.
 - Load test `setup()` waits on `/health/ready`.
+- Tests: `IsRankingCachedAsync` (cold, warm, after refresh, failed rebuild, never calls Hacker News),
+  health check results, limiter options (defaults, binding, validation on start); component tests
+  for live/ready and for the limiter (a stubbed service holds the only permit deterministically:
+  `429` for the next request, health endpoints still `200`).
 
 ### 7. Load test and documentation
 - Run the `Load test` workflow; calibrate the SLO targets with the measured results.

@@ -58,6 +58,13 @@ internal sealed partial class BestStoriesService(
         await cache.SetAsync(RankedStoriesKey, ranking, _entryOptions, cancellationToken: cancellationToken);
     }
 
+    public async Task<bool> IsRankingCachedAsync(CancellationToken cancellationToken) =>
+        await cache.GetOrCreateAsync(
+            RankedStoriesKey,
+            static _ => ValueTask.FromResult<RankedStories?>(null),
+            CachedOnly,
+            cancellationToken: cancellationToken) is not null;
+
     // refresh: re-fetch everything from Hacker News instead of fetching only what is not cached.
     private async ValueTask<RankedStories> RankAsync(bool refresh, CancellationToken cancellationToken)
     {

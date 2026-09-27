@@ -22,9 +22,11 @@ src/HackerNews.BestStories.Api/
 ├── Apis/                    Minimal API endpoint groups (e.g. BestStoriesApi.MapBestStoriesApi)
 ├── BackgroundServices/      Hosted services (periodic cache refresh)
 ├── Extensions/              IServiceCollection / WebApplication extension methods
+├── HealthChecks/            IHealthCheck implementations (readiness)
 ├── Infrastructure/
 │   └── HackerNews/          Typed HttpClient, upstream DTOs and options
 ├── Models/                  Public API contracts (response DTOs)
+├── RateLimiting/            Options of the global incoming concurrency limiter
 ├── Services/                Application logic (ranking, cached best stories)
 ├── Properties/launchSettings.json
 ├── appsettings*.json

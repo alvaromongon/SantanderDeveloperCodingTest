@@ -51,17 +51,17 @@ export const options = {
 };
 
 export function setup() {
-  // Wait for the API to be ready and warm the cache, so the test measures steady state.
+  // Wait until the API is ready (the ranking is cached), so the test measures steady state.
   const deadline = Date.now() + 60_000;
   let ready = false;
   while (!ready && Date.now() < deadline) {
-    ready = http.get(`${BASE_URL}${ENDPOINT}?count=1`, { tags: { name: 'warmup' } }).status === 200;
+    ready = http.get(`${BASE_URL}/health/ready`, { tags: { name: 'readiness' } }).status === 200;
     if (!ready) {
       sleep(1);
     }
   }
   if (!ready) {
-    throw new Error(`API not ready at ${BASE_URL}${ENDPOINT}`);
+    throw new Error(`API not ready at ${BASE_URL}/health/ready`);
   }
 
   // Only count upstream requests made during the measured window.
