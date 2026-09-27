@@ -1,17 +1,21 @@
 using System.Net;
 
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
+using HackerNews.BestStories.Api.ComponentTests.TestDoubles;
 
 namespace HackerNews.BestStories.Api.ComponentTests;
 
-public sealed class ProgramTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public sealed class ProgramTests : IAsyncDisposable
 {
-    // The cache refresher calls Hacker News on start: point it to a closed local port so these
-    // tests never reach the real API.
-    private readonly WebApplicationFactory<Program> _factory = factory.WithWebHostBuilder(builder =>
-        builder.UseSetting("HackerNews:BaseAddress", "http://127.0.0.1:9/"));
+    private readonly HackerNewsStub _hackerNews = new();
+    private readonly BestStoriesApiFactory _factory;
+
+    public ProgramTests() => _factory = new BestStoriesApiFactory(_hackerNews);
+
+    public async ValueTask DisposeAsync()
+    {
+        await _factory.DisposeAsync();
+        _hackerNews.Dispose();
+    }
 
     [Fact]
     public async Task GetOpenApiDocument_ReturnsOk()

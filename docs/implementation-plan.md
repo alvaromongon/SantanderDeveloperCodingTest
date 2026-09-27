@@ -37,7 +37,8 @@ Follow the folder conventions and rules in [`CLAUDE.md`](../CLAUDE.md).
 |---|---|
 | API style | Minimal APIs, route groups, `TypedResults`, built-in OpenAPI |
 | `count < 1` | `400 Bad Request` with `ProblemDetails` |
-| `count > 200` | Returns all available stories (at most 200) |
+| `count > 200` | Returns all available stories (at most 200); no upper limit in the API or in OpenAPI (only `minimum: 1`), the limit is documented in the parameter description |
+| `count` errors | Validation `ProblemDetails` (`errors.count`), identical in every environment: *"The count query parameter is required."* (missing or empty) or *"count must be an integer greater than or equal to 1."* |
 | Ranking | All `beststories` items are ranked by `score` (the list is not guaranteed to be score-ordered), then `Take(n)` |
 | Ties on score | Keep the original Hacker News `beststories` order (stable sort) |
 | Story without `url` (e.g. Ask HN) | `uri` = `https://news.ycombinator.com/item?id={id}` |
@@ -135,7 +136,18 @@ retries) and `JsonException` on malformed payloads; callers (step 3) decide how 
   port so the refresher never reaches the real API.
 
 ### 5. Endpoint
-- `Apis/BestStoriesApi.MapBestStoriesApi()`: `GET /api/stories/best?count=n`, OpenAPI metadata.
+- `Apis/BestStoriesApi.MapBestStoriesApi()`: `GET /api/stories/best?count=n`, OpenAPI metadata
+  (`200`, `400`, `503`; `count` required with `minimum: 1` and no `maximum`, set by an operation
+  transformer).
+- `count` validated by an endpoint filter on the raw query value, so binding failures (missing,
+  not an integer, out of the `int` range) get a precise error. `RouteHandlerOptions.ThrowOnBadRequest
+  = false` so binding failures reach the filter in every environment. The built-in `[Range]`
+  validation is not used: it reports binding failures as a range error on the default `0` and
+  publishes `maximum: 2147483647`.
+- `HackerNewsUnavailableException` mapped to `503` in the handler. `AddProblemDetails()`,
+  `UseExceptionHandler()` and `UseStatusCodePages()` so every error is a `ProblemDetails`.
+- Component test host: `TestDoubles/BestStoriesApiFactory` (Hacker News replaced by
+  `TestDoubles/HackerNewsStub` on WireMock.Net, periodic refresh pushed out, retry delay 1 ms).
 - Component tests (`WebApplicationFactory` + WireMock.Net): happy path and JSON contract, ordering,
   `count` validation (400), `count > 200`, Hacker News down with cold cache (503) and warm cache
   (stale data served), upstream calls bounded under concurrent requests.
