@@ -1,3 +1,4 @@
+using HackerNews.BestStories.Api.BackgroundServices;
 using HackerNews.BestStories.Api.Extensions;
 using HackerNews.BestStories.Api.Services;
 
@@ -29,5 +30,13 @@ public sealed class BestStoriesExtensionsTests
 
         first.Should().BeOfType<BestStoriesService>();
         second.Should().NotBeSameAs(first);
+    }
+
+    [Fact]
+    public void AddBestStoriesService_HostedServices_IncludeCacheRefresher()
+    {
+        using var provider = BuildServiceProvider();
+
+        provider.GetServices<IHostedService>().Should().ContainSingle(service => service is BestStoriesCacheRefresher);
     }
 }

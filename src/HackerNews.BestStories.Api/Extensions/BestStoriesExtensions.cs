@@ -1,13 +1,16 @@
+using HackerNews.BestStories.Api.BackgroundServices;
 using HackerNews.BestStories.Api.Services;
 
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace HackerNews.BestStories.Api.Extensions;
 
 internal static class BestStoriesExtensions
 {
     /// <summary>
-    /// Registers <see cref="HybridCache"/> (in-memory) and the <see cref="IBestStoriesService"/>.
+    /// Registers <see cref="HybridCache"/> (in-memory), the <see cref="IBestStoriesService"/> and the
+    /// <see cref="BestStoriesCacheRefresher"/> that keeps the cache fresh.
     /// Requires <see cref="HackerNewsExtensions.AddHackerNewsClient"/>.
     /// </summary>
     /// <remarks>
@@ -19,6 +22,8 @@ internal static class BestStoriesExtensions
     {
         builder.Services.AddHybridCache();
         builder.Services.AddTransient<IBestStoriesService, BestStoriesService>();
+        builder.Services.TryAddSingleton(TimeProvider.System);
+        builder.Services.AddHostedService<BestStoriesCacheRefresher>();
 
         return builder;
     }

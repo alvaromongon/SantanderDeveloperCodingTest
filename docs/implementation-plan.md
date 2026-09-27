@@ -49,7 +49,8 @@ Follow the folder conventions and rules in [`CLAUDE.md`](../CLAUDE.md).
 | Outgoing concurrency bound | Concurrency limiter of `AddStandardResilienceHandler()` (outermost strategy, shared by every client instance, retries included): `PermitLimit = MaxConcurrentRequests`, queue of 1000 |
 | Inbound protection | Global concurrency limiter (configurable, generous) returning `429`; per-client rate limiting is a documented future enhancement |
 | Defaults | Refresh interval **60 s**, cache TTL **3 min**, max **8** concurrent Hacker News calls |
-| Tests | xUnit v3 (MTP), NSubstitute, AwesomeAssertions, WireMock.Net, `FakeTimeProvider`; never call the real Hacker News API |
+| Cache warm-up | On start the refresher warms up the ranking through `GetBestStoriesAsync` (`GetOrCreateAsync`), so it shares the single rebuild with cold-cache requests instead of issuing a second one |
+| Tests | xUnit v3 (MTP), NSubstitute, AwesomeAssertions, WireMock.Net, `FakeTimeProvider`, `FakeLogger`; never call the real Hacker News API |
 
 ## Caching design (hybrid)
 
@@ -123,11 +124,15 @@ retries) and `JsonException` on malformed payloads; callers (step 3) decide how 
   cached copy fallback, last ranking kept on failure), concurrency bound shared across clients.
 
 ### 4. Background refresher
-- `BackgroundServices/BestStoriesCacheRefresher`: on each interval creates a scope
-  (`IServiceScopeFactory`) and calls `IBestStoriesService.RefreshAsync()`; a
-  `HackerNewsUnavailableException` is logged and the last good data keeps being served.
-- Tests with `FakeTimeProvider`: refreshes on each interval, failure keeps last good data,
-  cancellation stops cleanly. Logging via `LoggerMessage` source generator.
+- `BackgroundServices/BestStoriesCacheRefresher`: on start warms up the ranking; then on each
+  interval (`PeriodicTimer` + `TimeProvider`) creates a scope (`IServiceScopeFactory`) and calls
+  `IBestStoriesService.RefreshAsync()`; a `HackerNewsUnavailableException` is logged and the last
+  good data keeps being served. On stop the cancellation propagates (the host treats it as clean).
+- Registered by `AddBestStoriesService()` together with `TimeProvider.System`.
+- Tests with `FakeTimeProvider` and `FakeLogger`: warm-up, refreshes on each interval (new scope
+  each time), failure is logged and refreshing continues, cancellation stops cleanly. Logging via
+  `LoggerMessage` source generator. Component tests point `HackerNews:BaseAddress` to a closed local
+  port so the refresher never reaches the real API.
 
 ### 5. Endpoint
 - `Apis/BestStoriesApi.MapBestStoriesApi()`: `GET /api/stories/best?count=n`, OpenAPI metadata.
