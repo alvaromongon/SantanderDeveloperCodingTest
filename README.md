@@ -90,6 +90,23 @@ and can be run manually:
 .githooks/pre-push
 ```
 
+The hook is versioned in `.githooks/` and enabled automatically by the first local build
+(`git config core.hooksPath .githooks`, see `Directory.Build.props`).
+
+Test conventions:
+
+- **Unit tests** exercise one type in isolation (collaborators replaced with NSubstitute or
+  hand-written fakes, time with `FakeTimeProvider`).
+- **Component tests** run the whole API in-process with `WebApplicationFactory`, with Hacker News
+  stubbed by WireMock.Net. No test calls the real Hacker News API.
+- Test folders and namespaces **mirror the source**: `src/.../Services/Foo.cs` →
+  `tests/...UnitTests/Services/FooTests.cs` (namespace `HackerNews.BestStories.Api.UnitTests.Services`),
+  one `{Type}Tests` class per type.
+- Shared hand-written fakes and stubs live in `TestDoubles/` at the root of each test project, the
+  only test folder that does not mirror the source.
+- Test names follow `Method_Scenario_ExpectedResult`.
+- Coverage is merged and checked against the threshold (80% lines) by `build/coverage.sh`.
+
 ## Project structure
 
 ```
@@ -107,11 +124,26 @@ src/HackerNews.BestStories.Api/
 tests/
 ├── HackerNews.BestStories.Api.UnitTests/       Unit tests (mirror the src folders)
 ├── HackerNews.BestStories.Api.ComponentTests/  In-process API tests, Hacker News stubbed (mirror the src folders)
-└── HackerNews.BestStories.Api.LoadTests/       k6 load test validating the SLO
+└── HackerNews.BestStories.Api.LoadTests/       k6 script, WireMock stub mappings and compose file (SLO)
+build/coverage.sh            Merges coverage and enforces the threshold
+.githooks/pre-push           Local quality gate
+.github/                     CI, CodeQL and load test workflows, path filters, ruleset, Dependabot
+docs/implementation-plan.md  Agreed design decisions and implementation steps
 ```
 
 The layout follows Microsoft's reference Minimal API services (eShop): endpoints grouped with
-route-group extension methods and dependency injection wired through extension methods.
+route-group extension methods (e.g. `BestStoriesApi.MapBestStoriesApi`), dependency injection wired
+through extension methods, and technical folders inside a single web project.
+
+### Development conventions
+
+- Development follows **TDD**: a failing test first, the minimum code to pass it, then refactor.
+- Code follows the Microsoft .NET naming and coding conventions. `.editorconfig` is enforced on
+  build and warnings are errors (`Directory.Build.props`).
+- Package versions live only in `Directory.Packages.props` (Central Package Management): a
+  `PackageReference` never has a `Version`. Restores are locked, so updated `packages.lock.json`
+  files are committed.
+- `main` is protected: every change goes through a pull request (see [Quality gates](#quality-gates)).
 
 ## Design
 
@@ -196,11 +228,16 @@ received exactly one full refresh (201 calls) per minute in every run, independe
 
 ### Load test
 
-The [`Load test`](.github/workflows/load-test.yml) workflow runs **nightly at 03:00 UTC** and on
-demand (with configurable rate and duration). It starts the API and a WireMock stub of Hacker News
-with Docker Compose, drives a constant arrival rate with [k6](https://k6.io/), and fails when any
-SLO threshold is breached. The SLO report is written to the workflow run summary, and the raw
-results (JSON and HTML report) are uploaded as an artifact.
+The [`Load test`](.github/workflows/load-test.yml) workflow runs **on demand** (Actions → *Load
+test* → *Run workflow*, with configurable rate and duration). It starts the API and a WireMock stub
+of Hacker News with Docker Compose, drives a constant arrival rate with [k6](https://k6.io/), and
+fails when any SLO threshold is breached. The SLO report is written to the workflow run summary, and
+the raw results (JSON and HTML report) are uploaded as an artifact.
+
+In a product maintained by a team, the workflow would run **nightly** (the schedule is already in
+the workflow, commented out) to track how the SLO evolves as the team introduces changes and
+improvements. It is disabled here because this coding test is a one-off deliverable without
+continuous improvement, so scheduled runs would only repeat the same measurement.
 
 Run it locally:
 
@@ -260,7 +297,7 @@ written to `tests/HackerNews.BestStories.Api.LoadTests/results/`.
 | Locked NuGet restore and vulnerable package audit | | ✅ |
 | Docker image build and Trivy scan | | ✅ |
 | CodeQL static analysis | | ✅ |
-| SLO load test | | ✅ (nightly) |
+| SLO load test | | ✅ (on demand) |
 
 `main` is protected by a repository ruleset ([definition](.github/rulesets/main.json)): changes go
 through pull requests, the `Build & test`, `Docker image` and `Analyze C#` checks must pass and the
