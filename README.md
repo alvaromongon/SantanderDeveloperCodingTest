@@ -90,6 +90,23 @@ and can be run manually:
 .githooks/pre-push
 ```
 
+The hook is versioned in `.githooks/` and enabled automatically by the first local build
+(`git config core.hooksPath .githooks`, see `Directory.Build.props`).
+
+Test conventions:
+
+- **Unit tests** exercise one type in isolation (collaborators replaced with NSubstitute or
+  hand-written fakes, time with `FakeTimeProvider`).
+- **Component tests** run the whole API in-process with `WebApplicationFactory`, with Hacker News
+  stubbed by WireMock.Net. No test calls the real Hacker News API.
+- Test folders and namespaces **mirror the source**: `src/.../Services/Foo.cs` →
+  `tests/...UnitTests/Services/FooTests.cs` (namespace `HackerNews.BestStories.Api.UnitTests.Services`),
+  one `{Type}Tests` class per type.
+- Shared hand-written fakes and stubs live in `TestDoubles/` at the root of each test project, the
+  only test folder that does not mirror the source.
+- Test names follow `Method_Scenario_ExpectedResult`.
+- Coverage is merged and checked against the threshold (80% lines) by `build/coverage.sh`.
+
 ## Project structure
 
 ```
@@ -107,11 +124,26 @@ src/HackerNews.BestStories.Api/
 tests/
 ├── HackerNews.BestStories.Api.UnitTests/       Unit tests (mirror the src folders)
 ├── HackerNews.BestStories.Api.ComponentTests/  In-process API tests, Hacker News stubbed (mirror the src folders)
-└── HackerNews.BestStories.Api.LoadTests/       k6 load test validating the SLO
+└── HackerNews.BestStories.Api.LoadTests/       k6 script, WireMock stub mappings and compose file (SLO)
+build/coverage.sh            Merges coverage and enforces the threshold
+.githooks/pre-push           Local quality gate
+.github/                     CI, CodeQL and load test workflows, path filters, ruleset, Dependabot
+docs/implementation-plan.md  Agreed design decisions and implementation steps
 ```
 
 The layout follows Microsoft's reference Minimal API services (eShop): endpoints grouped with
-route-group extension methods and dependency injection wired through extension methods.
+route-group extension methods (e.g. `BestStoriesApi.MapBestStoriesApi`), dependency injection wired
+through extension methods, and technical folders inside a single web project.
+
+### Development conventions
+
+- Development follows **TDD**: a failing test first, the minimum code to pass it, then refactor.
+- Code follows the Microsoft .NET naming and coding conventions. `.editorconfig` is enforced on
+  build and warnings are errors (`Directory.Build.props`).
+- Package versions live only in `Directory.Packages.props` (Central Package Management): a
+  `PackageReference` never has a `Version`. Restores are locked, so updated `packages.lock.json`
+  files are committed.
+- `main` is protected: every change goes through a pull request (see [Quality gates](#quality-gates)).
 
 ## Design
 
