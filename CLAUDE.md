@@ -8,6 +8,9 @@ Santander backend coding test: an ASP.NET Core (.NET 10) Minimal API that return
 Hacker News stories ordered by score, without overloading the Hacker News API.
 See `README.md` for requirements, design and assumptions.
 
+**Implementation plan:** [`docs/implementation-plan.md`](docs/implementation-plan.md) holds the agreed
+design, decisions and steps. Read it before implementing and keep it updated if a decision changes.
+
 ## Layout
 
 Source follows the conventions of Microsoft's reference Minimal API services (eShop):
