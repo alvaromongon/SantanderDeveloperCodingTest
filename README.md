@@ -50,8 +50,8 @@ Returns the best `count` stories ordered by score descending:
 
 | Status | When |
 |---|---|
-| `200 OK` | Stories returned; `count` greater than the available best stories (at most 200) returns all of them |
-| `400 Bad Request` | `count` missing, not a number or lower than 1 (`ProblemDetails` with the validation errors) |
+| `200 OK` | Stories returned. There is no upper limit: a `count` above the best stories provided by Hacker News (currently at most 200) returns all of them |
+| `400 Bad Request` | Validation `ProblemDetails` with the error in `errors.count`: *"The count query parameter is required."* when it is missing or empty, *"count must be an integer greater than or equal to 1."* otherwise |
 | `503 Service Unavailable` | Hacker News is unavailable and there is no cached data yet (`ProblemDetails`) |
 
 ## How to test
@@ -139,7 +139,8 @@ written to `tests/HackerNews.BestStories.Api.LoadTests/results/`.
 ## Assumptions
 
 - The Hacker News `beststories` endpoint returns at most **200** IDs, so `n` greater than 200
-  returns all available stories; `n` lower than 1 is rejected with `400 Bad Request`.
+  returns all available stories (the API sets no upper limit, following the usual practice for
+  result-size parameters); `n` lower than 1 is rejected with `400 Bad Request`.
 - The best stories are ranked by `score` across the whole `beststories` list, not only the first
   `n` IDs, because Hacker News does not guarantee that list is ordered by score.
 - Data may be slightly stale (up to the configured refresh interval).

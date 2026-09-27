@@ -98,44 +98,61 @@ public sealed class BestStoriesApiTests : IAsyncDisposable
         Titles(stories).Should().Equal("Story 2", "Story 3");
     }
 
-    [Fact]
-    public async Task GetBestStories_CountGreaterThanAvailable_ReturnsAllStories()
+    [Theory]
+    [InlineData(500)]
+    [InlineData(int.MaxValue)]
+    public async Task GetBestStories_CountGreaterThanAvailable_ReturnsAllStories(int count)
     {
         _hackerNews.GivenBestStories((1, 50), (2, 300), (3, 120));
         using var client = _factory.CreateClient();
 
-        var stories = await GetBestStoriesAsync(client, 500);
+        var stories = await GetBestStoriesAsync(client, count);
 
         stories.Should().HaveCount(3);
     }
 
-    [Theory]
-    [InlineData("0")]
-    [InlineData("-1")]
-    public async Task GetBestStories_CountLessThanOne_ReturnsValidationProblem(string count)
+    public static TheoryData<string, string, string> InvalidCounts()
     {
-        using var client = _factory.CreateClient();
+        const string required = "The count query parameter is required.";
+        const string invalid = "count must be an integer greater than or equal to 1.";
+        (string Query, string Error)[] cases =
+        [
+            ("", required),
+            ("?count=", required),
+            ("?count=abc", invalid),
+            ("?count=1.5", invalid),
+            ("?count=99999999999", invalid),
+            ("?count=0", invalid),
+            ("?count=-1", invalid),
+        ];
 
-        using var response = await client.GetAsync($"/api/stories/best?count={count}", CancellationToken);
+        var data = new TheoryData<string, string, string>();
+        foreach (var environment in (string[])["Development", "Production"])
+        {
+            foreach (var (query, error) in cases)
+            {
+                data.Add(environment, query, error);
+            }
+        }
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(InvalidCounts))]
+    public async Task GetBestStories_InvalidCount_ReturnsValidationProblemWithCountError(
+        string environment, string query, string expectedError)
+    {
+        await using var factory = new BestStoriesApiFactory(_hackerNews, environment);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync($"/api/stories/best{query}", CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         response.Content.Headers.ContentType!.MediaType.Should().Be(ProblemJson);
         var problem = JsonNode.Parse(await response.Content.ReadAsStringAsync(CancellationToken))!;
-        problem["errors"]!["count"].Should().NotBeNull($"the problem was {problem}");
-    }
-
-    [Theory]
-    [InlineData("/api/stories/best")]
-    [InlineData("/api/stories/best?count=")]
-    [InlineData("/api/stories/best?count=abc")]
-    public async Task GetBestStories_MissingOrInvalidCount_ReturnsBadRequestProblem(string uri)
-    {
-        using var client = _factory.CreateClient();
-
-        using var response = await client.GetAsync(uri, CancellationToken);
-
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        response.Content.Headers.ContentType!.MediaType.Should().Be(ProblemJson);
+        problem["errors"]!["count"]!.AsArray().Select(error => (string?)error)
+            .Should().Equal([expectedError], $"the problem was {problem}");
     }
 
     [Fact]
@@ -195,6 +212,7 @@ public sealed class BestStoriesApiTests : IAsyncDisposable
         var count = operation["parameters"]!.AsArray().Single(parameter => (string?)parameter!["name"] == "count")!;
         ((bool?)count["required"]).Should().BeTrue();
         ((int?)count["schema"]!["minimum"]).Should().Be(1);
+        count["schema"]!["maximum"].Should().BeNull("there is no upper limit, only the stories Hacker News provides");
         operation["responses"]!.AsObject().Select(response => response.Key)
             .Should().BeEquivalentTo(["200", "400", "503"]);
     }

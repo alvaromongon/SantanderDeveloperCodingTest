@@ -6,17 +6,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddHackerNewsClient();
 builder.AddBestStoriesService();
 builder.Services.AddProblemDetails();
-builder.Services.AddValidation();
+// Binding failures reach the endpoint filters instead of throwing, in every environment.
+builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = false);
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// Binding failures (missing or malformed count) throw in Development; keep their 400 status.
-app.UseExceptionHandler(new ExceptionHandlerOptions
-{
-    StatusCodeSelector = exception =>
-        exception is BadHttpRequestException badRequest ? badRequest.StatusCode : StatusCodes.Status500InternalServerError,
-});
+app.UseExceptionHandler();
 app.UseStatusCodePages();
 
 app.MapOpenApi();
