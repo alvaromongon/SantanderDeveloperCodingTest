@@ -29,7 +29,30 @@ The OpenAPI document is available at `/openapi/v1.json`.
 
 ### Usage
 
-_TBD_ – `GET /api/stories/best?count={n}`
+```bash
+curl "http://localhost:8080/api/stories/best?count=3"
+```
+
+Returns the best `count` stories ordered by score descending:
+
+```json
+[
+  {
+    "title": "A uBlock Origin update was rejected from the Chrome Web Store",
+    "uri": "https://github.com/uBlockOrigin/uBlock-issues/issues/745",
+    "postedBy": "ismaildonmez",
+    "time": "2019-10-12T13:43:01+00:00",
+    "score": 1716,
+    "commentCount": 572
+  }
+]
+```
+
+| Status | When |
+|---|---|
+| `200 OK` | Stories returned; `count` greater than the available best stories (at most 200) returns all of them |
+| `400 Bad Request` | `count` missing, not a number or lower than 1 (`ProblemDetails` with the validation errors) |
+| `503 Service Unavailable` | Hacker News is unavailable and there is no cached data yet (`ProblemDetails`) |
 
 ## How to test
 

@@ -135,7 +135,14 @@ retries) and `JsonException` on malformed payloads; callers (step 3) decide how 
   port so the refresher never reaches the real API.
 
 ### 5. Endpoint
-- `Apis/BestStoriesApi.MapBestStoriesApi()`: `GET /api/stories/best?count=n`, OpenAPI metadata.
+- `Apis/BestStoriesApi.MapBestStoriesApi()`: `GET /api/stories/best?count=n`, OpenAPI metadata
+  (`200`, `400`, `503`; `count` required with `minimum: 1`).
+- `count` validated with the built-in .NET 10 validation (`AddValidation()` + `[Range(1, int.MaxValue)]`);
+  `HackerNewsUnavailableException` mapped to `503` in the handler. `AddProblemDetails()`,
+  `UseExceptionHandler()` (keeping the status of `BadHttpRequestException`, thrown on binding failures
+  in Development) and `UseStatusCodePages()` so every error is a `ProblemDetails`.
+- Component test host: `TestDoubles/BestStoriesApiFactory` (Hacker News replaced by
+  `TestDoubles/HackerNewsStub` on WireMock.Net, periodic refresh pushed out, retry delay 1 ms).
 - Component tests (`WebApplicationFactory` + WireMock.Net): happy path and JSON contract, ordering,
   `count` validation (400), `count > 200`, Hacker News down with cold cache (503) and warm cache
   (stale data served), upstream calls bounded under concurrent requests.
