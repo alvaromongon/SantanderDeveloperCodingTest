@@ -1,0 +1,47 @@
+# Load test environment: the API container, a WireMock stub of the Hacker News API and k6.
+# Usage (from the repository root):
+#   docker compose -f tests/HackerNews.BestStories.Api.LoadTests/compose.yaml up -d --build api hackernews-stub
+#   docker compose -f tests/HackerNews.BestStories.Api.LoadTests/compose.yaml run --rm k6
+#   docker compose -f tests/HackerNews.BestStories.Api.LoadTests/compose.yaml down
+name: hackernews-beststories-loadtest
+
+services:
+  hackernews-stub:
+    image: wiremock/wiremock:3.13.2
+    command: ["--port", "8080", "--async-response-enabled=true", "--disable-banner"]
+    volumes:
+      - ./hackernews-stub/mappings:/home/wiremock/mappings:ro
+    ports:
+      - "8081:8080"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      HackerNews__BaseAddress: http://hackernews-stub:8080/v0/
+      HackerNews__RefreshInterval: ${REFRESH_INTERVAL:-00:01:00}
+    depends_on:
+      - hackernews-stub
+    ports:
+      - "8080:8080"
+
+  k6:
+    image: grafana/k6:2.3.0
+    profiles: ["loadtest"]
+    command: ["run", "/scripts/best-stories.js"]
+    environment:
+      BASE_URL: http://api:8080
+      STUB_ADMIN_URL: http://hackernews-stub:8080/__admin
+      RATE: ${RATE:-500}
+      DURATION: ${DURATION:-3m}
+      REFRESH_INTERVAL_SECONDS: ${REFRESH_INTERVAL_SECONDS:-60}
+      ENDPOINT: ${ENDPOINT:-/api/stories/best}
+      K6_WEB_DASHBOARD: "true"
+      K6_WEB_DASHBOARD_EXPORT: /results/report.html
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./results:/results
+    depends_on:
+      - api

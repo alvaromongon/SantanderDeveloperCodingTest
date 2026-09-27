@@ -2,9 +2,9 @@ using System.Net;
 
 using Microsoft.AspNetCore.Mvc.Testing;
 
-namespace HackerNews.BestStories.Api.ComponentTests.OpenApi;
+namespace HackerNews.BestStories.Api.ComponentTests;
 
-public sealed class OpenApiDocumentTests(WebApplicationFactory<Program> factory)
+public sealed class ProgramTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
     [Fact]

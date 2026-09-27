@@ -1,0 +1,71 @@
+name: Load test
+
+on:
+  schedule:
+    # Nightly at 03:00 UTC (low activity window for shared runners).
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      rate:
+        description: Requests per second (SLO load)
+        default: "500"
+        required: true
+      duration:
+        description: Test duration (e.g. 90s, 3m)
+        default: "3m"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: load-test
+  cancel-in-progress: false
+
+env:
+  COMPOSE_FILE: tests/HackerNews.BestStories.Api.LoadTests/compose.yaml
+  RATE: ${{ inputs.rate || '500' }}
+  DURATION: ${{ inputs.duration || '3m' }}
+
+jobs:
+  load-test:
+    name: Load test (SLO)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Start API and Hacker News stub
+        run: docker compose up --detach --build api hackernews-stub
+
+      - name: Run k6
+        run: |
+          # The k6 image runs as a non-root user: the results folder must be writable by it.
+          install -d -m 777 tests/HackerNews.BestStories.Api.LoadTests/results
+          docker compose run --rm k6
+
+      - name: Publish report
+        if: always()
+        run: |
+          summary=tests/HackerNews.BestStories.Api.LoadTests/results/summary.md
+          if [ -f "$summary" ]; then
+            cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## ❌ Load test did not produce a report" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: load-test-results
+          path: tests/HackerNews.BestStories.Api.LoadTests/results/
+          if-no-files-found: ignore
+
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Stop environment
+        if: always()
+        run: docker compose down --volumes

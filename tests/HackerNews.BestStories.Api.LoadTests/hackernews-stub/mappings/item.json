@@ -1,0 +1,17 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/v0/item/[0-9]+\\.json"
+  },
+  "response": {
+    "status": 200,
+    "fixedDelayMilliseconds": 100,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\"by\":\"user{{regexExtract request.pathSegments.[2] '[0-9]+'}}\",\"descendants\":{{randomInt lower=0 upper=1000}},\"id\":{{regexExtract request.pathSegments.[2] '[0-9]+'}},\"score\":{{randomInt lower=1 upper=5000}},\"time\":1570887781,\"title\":\"Load test story {{regexExtract request.pathSegments.[2] '[0-9]+'}}\",\"type\":\"story\",\"url\":\"https://example.com/stories/{{regexExtract request.pathSegments.[2] '[0-9]+'}}\"}",
+    "transformers": [
+      "response-template"
+    ]
+  }
+}

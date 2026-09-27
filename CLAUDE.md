@@ -10,12 +10,35 @@ See `README.md` for requirements, design and assumptions.
 
 ## Layout
 
-- `src/HackerNews.BestStories.Api` – the API (Minimal APIs).
-- `tests/HackerNews.BestStories.Api.UnitTests` – unit tests (xUnit v3, NSubstitute, AwesomeAssertions).
-- `tests/HackerNews.BestStories.Api.ComponentTests` – in-process tests with `WebApplicationFactory`
-  and WireMock.Net stubbing the Hacker News API. No test may call the real Hacker News API.
+Source follows the conventions of Microsoft's reference Minimal API services (eShop):
+endpoints grouped with route-group extension methods, DI wiring in extension methods, and
+technical folders inside a single web project.
+
+```
+src/HackerNews.BestStories.Api/
+├── Apis/                    Minimal API endpoint groups (e.g. BestStoriesApi.MapBestStoriesApi)
+├── BackgroundServices/      Hosted services (periodic cache refresh)
+├── Extensions/              IServiceCollection / WebApplication extension methods
+├── Infrastructure/
+│   └── HackerNews/          Typed HttpClient, upstream DTOs and options
+├── Models/                  Public API contracts (response DTOs)
+├── Services/                Application logic (ranking, cached best stories)
+├── Properties/launchSettings.json
+├── appsettings*.json
+└── Program.cs
+tests/
+├── HackerNews.BestStories.Api.UnitTests/       Mirrors src folders, one `{Type}Tests` class per type
+├── HackerNews.BestStories.Api.ComponentTests/  Mirrors src folders; in-process API via
+│                                               WebApplicationFactory, Hacker News stubbed with WireMock.Net
+└── HackerNews.BestStories.Api.LoadTests/       k6 script, WireMock stub mappings and compose file (SLO)
+```
+
+- Test folders and namespaces **mirror the source**: `src/.../Services/Foo.cs` →
+  `tests/...UnitTests/Services/FooTests.cs`, namespace `HackerNews.BestStories.Api.UnitTests.Services`.
+- No test may call the real Hacker News API.
 - `build/coverage.sh` – merges coverage and enforces the threshold (80% lines).
 - `.githooks/pre-push` – local gate (format, build, tests, coverage); enabled by the first build.
+- `.github/rulesets/` – branch protection applied to GitHub (see README).
 
 ## Commands
 
@@ -24,7 +47,15 @@ dotnet build
 dotnet test
 dotnet format --verify-no-changes
 .githooks/pre-push   # full local gate, same checks as CI
+
+# Load test (SLO) with Docker
+docker compose -f tests/HackerNews.BestStories.Api.LoadTests/compose.yaml up -d --build api hackernews-stub
+docker compose -f tests/HackerNews.BestStories.Api.LoadTests/compose.yaml run --rm k6
+docker compose -f tests/HackerNews.BestStories.Api.LoadTests/compose.yaml down
 ```
+
+The SLO is defined in `README.md` and enforced by the thresholds in
+`tests/HackerNews.BestStories.Api.LoadTests/scripts/best-stories.js`; keep both in sync.
 
 ## Rules
 
@@ -35,4 +66,4 @@ dotnet format --verify-no-changes
   never put `Version` on a `PackageReference`. Commit updated `packages.lock.json` files.
 - Test names: `Method_Scenario_ExpectedResult`.
 - Commits are authored by the repository owner: no `Co-Authored-By` trailers.
-- **Never `git push`** – the owner pushes manually.
+- **Never `git push`** – the owner pushes manually. `main` is protected: changes go through pull requests.
