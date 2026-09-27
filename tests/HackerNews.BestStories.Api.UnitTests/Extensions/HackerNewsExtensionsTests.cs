@@ -12,7 +12,7 @@ namespace HackerNews.BestStories.Api.UnitTests.Extensions;
 public sealed class HackerNewsExtensionsTests
 {
     private static ServiceProvider BuildServiceProvider(
-        Dictionary<string, string?> configuration, StubHttpMessageHandler? primaryHandler = null)
+        Dictionary<string, string?> configuration, HttpMessageHandler? primaryHandler = null)
     {
         var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
         builder.Configuration.AddInMemoryCollection(configuration);
@@ -109,5 +109,19 @@ public sealed class HackerNewsExtensionsTests
         ids.Should().Equal(1);
         handler.Requests.Should().ContainSingle()
             .Which.Should().Be(new Uri("http://hackernews-stub:8080/v0/beststories.json"));
+    }
+
+    [Fact]
+    public async Task AddHackerNewsClient_ConcurrentCallsFromSeveralClients_LimitsRequestsInFlight()
+    {
+        using var handler = new ConcurrencyTrackingHttpMessageHandler("null");
+        using var provider = BuildServiceProvider(new() { ["HackerNews:MaxConcurrentRequests"] = "3" }, handler);
+
+        // Each resolution is a new transient client: the limit must be shared by all of them.
+        var calls = Enumerable.Range(1, 30).Select(id => provider.GetRequiredService<IHackerNewsClient>()
+            .GetItemAsync(id, TestContext.Current.CancellationToken));
+        await Task.WhenAll(calls);
+
+        handler.MaxInFlight.Should().Be(3);
     }
 }
