@@ -43,6 +43,10 @@ Follow the folder conventions and rules in [`CLAUDE.md`](../CLAUDE.md).
 | Story without `url` (e.g. Ask HN) | `uri` = `https://news.ycombinator.com/item?id={id}` |
 | Missing `descendants` | `commentCount` = 0 |
 | Items that are `null`, `deleted`, `dead` or not `type == "story"` | Excluded |
+| Item that fails after retries | Rebuild: skipped. Refresh: keeps its cached copy, skipped if none. If no story at all can be obtained, the rebuild/refresh fails |
+| Upstream failure contract | `BestStoriesService` wraps upstream failures (`HttpRequestException`, `JsonException`, Polly `ExecutionRejectedException`) in `HackerNewsUnavailableException` |
+| Service lifetime | `BestStoriesService` is **transient** (the typed Hacker News client is transient so `IHttpClientFactory` can rotate handlers); singletons resolve it from a scope |
+| Outgoing concurrency bound | Concurrency limiter of `AddStandardResilienceHandler()` (outermost strategy, shared by every client instance, retries included): `PermitLimit = MaxConcurrentRequests`, queue of 1000 |
 | Inbound protection | Global concurrency limiter (configurable, generous) returning `429`; per-client rate limiting is a documented future enhancement |
 | Defaults | Refresh interval **60 s**, cache TTL **3 min**, max **8** concurrent Hacker News calls |
 | Tests | xUnit v3 (MTP), NSubstitute, AwesomeAssertions, WireMock.Net, `FakeTimeProvider`; never call the real Hacker News API |
@@ -106,25 +110,22 @@ retries) and `JsonException` on malformed payloads; callers (step 3) decide how 
 - Tests with a fake `HttpMessageHandler`: IDs, item, `null` item, HTTP errors, deserialization.
 
 ### 3. Ranking service with cache
-- `Services/IBestStoriesService`, `BestStoriesService` using `HybridCache` and bounded concurrency.
+- `Services/IBestStoriesService`, `BestStoriesService` using `HybridCache`:
+  `GetBestStoriesAsync(count)` reads the ranking (`GetOrCreateAsync`, fetching only missing entries) and
+  `RefreshAsync()` re-fetches everything and overwrites the entries (`SetAsync`) for the refresher.
+- `RankedStories` and `StoryResponse` are sealed and `[ImmutableObject(true)]`, so `HybridCache`
+  returns the cached instance instead of deserializing a copy per request.
 - Stable sort by score descending, `Take(n)`.
+- Shared concurrency bound configured on the resilience pipeline in `AddHackerNewsClient()`.
+- DI registration (`AddBestStoriesService()`: `HybridCache` + transient service).
 - Tests: ordering and ties, `n` bigger than available, cache hits avoid client calls, stampede
-  protection (many concurrent calls → one rebuild), partial item failures.
-- **Discuss with the owner before implementing** (open points from step 2):
-  - *Service lifetime*: the typed `IHackerNewsClient` is transient so `IHttpClientFactory` can rotate
-    pooled handlers (DNS changes); a singleton capturing it would pin one handler forever.
-    Proposal: `BestStoriesService` **transient** (lightweight and stateless, construction cost is
-    negligible; scoped is equivalent since it is resolved once per request). Alternatives: scoped,
-    or singleton with `IHttpClientFactory` / `PooledConnectionLifetime`.
-  - *Consequence for step 4*: the singleton refresher cannot inject the service directly (captive
-    dependency / scope validation); it creates a scope per refresh with `IServiceScopeFactory`.
-  - *Where the concurrency bound lives*: it must be shared (singleton), not per service instance,
-    otherwise e.g. a cold-start rebuild overlapping a refresh doubles the limit. Options: a
-    singleton limiter (e.g. `SemaphoreSlim`) or the concurrency limiter of the
-    `AddStandardResilienceHandler()` pipeline configured with `MaxConcurrentRequests` and a queue.
+  protection (many concurrent calls → one rebuild), partial item failures, refresh (overwrite,
+  cached copy fallback, last ranking kept on failure), concurrency bound shared across clients.
 
 ### 4. Background refresher
-- `BackgroundServices/BestStoriesCacheRefresher`.
+- `BackgroundServices/BestStoriesCacheRefresher`: on each interval creates a scope
+  (`IServiceScopeFactory`) and calls `IBestStoriesService.RefreshAsync()`; a
+  `HackerNewsUnavailableException` is logged and the last good data keeps being served.
 - Tests with `FakeTimeProvider`: refreshes on each interval, failure keeps last good data,
   cancellation stops cleanly. Logging via `LoggerMessage` source generator.
 

@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace HackerNews.BestStories.Api.Models;
 
 /// <summary>
@@ -9,6 +11,8 @@ namespace HackerNews.BestStories.Api.Models;
 /// <param name="Time">Creation time in UTC.</param>
 /// <param name="Score">Score of the story.</param>
 /// <param name="CommentCount">Total number of comments.</param>
+/// <remarks>Marked immutable so <c>HybridCache</c> can return cached instances without copying them.</remarks>
+[ImmutableObject(true)]
 public sealed record StoryResponse(
     string Title,
     Uri Uri,
