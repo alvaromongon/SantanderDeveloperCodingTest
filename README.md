@@ -228,11 +228,16 @@ received exactly one full refresh (201 calls) per minute in every run, independe
 
 ### Load test
 
-The [`Load test`](.github/workflows/load-test.yml) workflow runs **nightly at 03:00 UTC** and on
-demand (with configurable rate and duration). It starts the API and a WireMock stub of Hacker News
-with Docker Compose, drives a constant arrival rate with [k6](https://k6.io/), and fails when any
-SLO threshold is breached. The SLO report is written to the workflow run summary, and the raw
-results (JSON and HTML report) are uploaded as an artifact.
+The [`Load test`](.github/workflows/load-test.yml) workflow runs **on demand** (Actions → *Load
+test* → *Run workflow*, with configurable rate and duration). It starts the API and a WireMock stub
+of Hacker News with Docker Compose, drives a constant arrival rate with [k6](https://k6.io/), and
+fails when any SLO threshold is breached. The SLO report is written to the workflow run summary, and
+the raw results (JSON and HTML report) are uploaded as an artifact.
+
+In a product maintained by a team, the workflow would run **nightly** (the schedule is already in
+the workflow, commented out) to track how the SLO evolves as the team introduces changes and
+improvements. It is disabled here because this coding test is a one-off deliverable without
+continuous improvement, so scheduled runs would only repeat the same measurement.
 
 Run it locally:
 
@@ -292,7 +297,7 @@ written to `tests/HackerNews.BestStories.Api.LoadTests/results/`.
 | Locked NuGet restore and vulnerable package audit | | ✅ |
 | Docker image build and Trivy scan | | ✅ |
 | CodeQL static analysis | | ✅ |
-| SLO load test | | ✅ (nightly) |
+| SLO load test | | ✅ (on demand) |
 
 `main` is protected by a repository ruleset ([definition](.github/rulesets/main.json)): changes go
 through pull requests, the `Build & test`, `Docker image` and `Analyze C#` checks must pass and the

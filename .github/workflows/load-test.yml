@@ -1,9 +1,11 @@
 name: Load test
 
 on:
-  schedule:
-    # Nightly at 03:00 UTC (low activity window for shared runners).
-    - cron: "0 3 * * *"
+  # The nightly schedule is disabled on purpose: this is a coding test delivered once, with no
+  # continuous changes to evaluate (see README.md > Load test). Uncomment it to run the SLO nightly.
+  # schedule:
+  #   # Nightly at 03:00 UTC (low activity window for shared runners).
+  #   - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       rate:
