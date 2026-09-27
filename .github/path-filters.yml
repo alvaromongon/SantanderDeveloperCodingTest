@@ -1,0 +1,33 @@
+# Paths that affect each pipeline job (used by dorny/paths-filter).
+# Anything not listed (README, docs/, CLAUDE.md, .claude/, load tests, rulesets, dependabot...) skips them.
+dotnet: &dotnet
+  - "src/**"
+  - "tests/HackerNews.BestStories.Api.UnitTests/**"
+  - "tests/HackerNews.BestStories.Api.ComponentTests/**"
+  - "*.slnx"
+  - "global.json"
+  - "Directory.Build.props"
+  - "Directory.Packages.props"
+  - ".editorconfig"
+  - "dotnet-tools.json"
+  - "build/**"
+  - ".github/path-filters.yml"
+
+ci:
+  - *dotnet
+  - ".github/workflows/ci.yml"
+
+docker:
+  - "src/**"
+  - "global.json"
+  - "Directory.Build.props"
+  - "Directory.Packages.props"
+  - ".editorconfig"
+  - "Dockerfile"
+  - ".dockerignore"
+  - ".github/path-filters.yml"
+  - ".github/workflows/ci.yml"
+
+codeql:
+  - *dotnet
+  - ".github/workflows/codeql.yml"

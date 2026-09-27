@@ -142,3 +142,7 @@ _TBD_
 `main` is protected by a repository ruleset ([definition](.github/rulesets/main.json)): changes go
 through pull requests, the `Build & test`, `Docker image` and `Analyze C#` checks must pass and the
 branch must be up to date. Force pushes and deletion are blocked.
+
+CI and CodeQL jobs only run when files that affect them change (see
+[`.github/path-filters.yml`](.github/path-filters.yml)); documentation-only changes skip them while
+the required checks still report as passed.

@@ -14,8 +14,28 @@ permissions:
   actions: read
 
 jobs:
+  # Skipped job (not workflow) on unrelated changes, so the required "Analyze C#" check still reports.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      csharp: ${{ github.event_name == 'schedule' || steps.filter.outputs.codeql == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: .github/path-filters.yml
+
   analyze:
     name: Analyze C#
+    needs: changes
+    if: needs.changes.outputs.csharp == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

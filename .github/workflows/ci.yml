@@ -22,8 +22,30 @@ env:
   COVERAGE_THRESHOLD: 80
 
 jobs:
+  # Jobs are skipped (not the whole workflow) when only unrelated files change: a skipped job
+  # still reports its check as successful, so the required checks of the ruleset are satisfied.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      ci: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.ci == 'true' }}
+      docker: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.docker == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: .github/path-filters.yml
+
   build-and-test:
     name: Build & test
+    needs: changes
+    if: needs.changes.outputs.ci == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -84,7 +106,9 @@ jobs:
   docker:
     name: Docker image
     runs-on: ubuntu-latest
-    needs: build-and-test
+    needs: [changes, build-and-test]
+    # Runs when the image inputs changed, provided Build & test did not fail (it may be skipped).
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.docker == 'true' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
