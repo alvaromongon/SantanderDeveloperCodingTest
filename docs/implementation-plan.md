@@ -121,6 +121,10 @@ retries) and `JsonException` on malformed payloads; callers (step 3) decide how 
 - Component tests (`WebApplicationFactory` + WireMock.Net): happy path and JSON contract, ordering,
   `count` validation (400), `count > 200`, Hacker News down with cold cache (503) and warm cache
   (stale data served), upstream calls bounded under concurrent requests.
+- Resilience of the Hacker News client (deferred from step 2, where it is not unit tested because
+  the retries use real backoff): transient upstream failures (e.g. `500` then `200`) are retried by
+  `AddStandardResilienceHandler()` and the request succeeds. Shorten the retry delay in the test
+  host configuration to keep the test fast.
 
 ### 6. Cross-cutting
 - Health checks: `/health/live` and `/health/ready` (ready when the ranked cache is warm).
