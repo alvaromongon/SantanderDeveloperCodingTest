@@ -89,8 +89,9 @@ Follow the folder conventions and rules in [`CLAUDE.md`](../CLAUDE.md).
 ### 1. Models and mapping
 - `Models/StoryResponse` (public contract, `sealed record`).
 - `Infrastructure/HackerNews/HackerNewsItem` (upstream DTO) and its mapping to `StoryResponse`.
-- Tests: Unix time → `DateTimeOffset` UTC and JSON shape (`+00:00`), `uri` fallback, missing
-  `descendants`, exclusion of deleted/dead/non-story items.
+- Tests: Unix time → `DateTimeOffset` UTC and JSON shape (`+00:00`), `uri` fallback (missing or
+  invalid `url`), missing `descendants`, exclusion of deleted/dead/non-story items.
+- Remove the temporary `--ignore-exit-code 8` from the unit test project (unit tests now exist).
 
 ### 2. Hacker News client
 - `Infrastructure/HackerNews/IHackerNewsClient`, `HackerNewsClient` (typed `HttpClient`),
@@ -118,7 +119,6 @@ Follow the folder conventions and rules in [`CLAUDE.md`](../CLAUDE.md).
 ### 6. Cross-cutting
 - Health checks: `/health/live` and `/health/ready` (ready when the ranked cache is warm).
 - Global concurrency limiter (`429` when exceeded).
-- Remove the temporary `--ignore-exit-code 8` from the unit test project.
 - Load test `setup()` waits on `/health/ready`.
 
 ### 7. Load test and documentation
