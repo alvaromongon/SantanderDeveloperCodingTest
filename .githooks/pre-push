@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Local quality gate: mirrors the CI checks and blocks the push if any fails.
+# Bypass only in emergencies with: git push --no-verify
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+echo "pre-push: checking format..."
+dotnet format --verify-no-changes
+
+echo "pre-push: building (warnings as errors)..."
+dotnet build --configuration Release
+
+echo "pre-push: running tests with coverage..."
+find tests -type d -name TestResults -prune -exec rm -rf {} +
+dotnet test --configuration Release --no-build \
+  --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
+
+echo "pre-push: checking coverage..."
+./build/coverage.sh
+
+echo "pre-push: all checks passed."

@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.cs diff=csharp
+*.sh text eol=lf
+.githooks/* text eol=lf
+*.png binary
+*.pdf binary

@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+**/TestResults/
+artifacts/
+tests/
+.git/
+.github/
+.githooks/
+.claude/
+.vs/
+.vscode/
+.idea/
+**/*.user
+**/*.md
+Dockerfile
+.dockerignore
